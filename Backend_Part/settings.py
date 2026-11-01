@@ -5,7 +5,7 @@ Django settings for Backend_Part project.
 from pathlib import Path
 import os
 from datetime import timedelta
-from django.core.management.utils import get_random_secret_key
+import dj_database_url  # Required for Neon PostgreSQL
 
 # -------------------------------
 # BASE DIR
@@ -15,10 +15,16 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # -------------------------------
 # SECURITY & DEBUG
 # -------------------------------
-SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY', get_random_secret_key())
-DEBUG = os.environ.get('DJANGO_DEBUG', 'True') == 'True'
+# Read from environment variables, with safe defaults for local development
+SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY', 'django-insecure-change-me-in-production')
+DEBUG = os.environ.get('DJANGO_DEBUG', 'False') == 'True'
 
-ALLOWED_HOSTS = ["127.0.0.1", "localhost", "0.0.0.0"]
+# Render provides a hostname; for local, allow these
+ALLOWED_HOSTS = [
+    '127.0.0.1',
+    'localhost',
+    '.onrender.com',  # Allows any Render service to connect
+]
 
 # -------------------------------
 # APPLICATION DEFINITION
@@ -44,9 +50,16 @@ INSTALLED_APPS = [
 
 ASGI_APPLICATION = "Backend_Part.asgi.application"
 
+# -------------------------------
+# CHANNEL LAYERS (WebSockets via Redis)
+# -------------------------------
+# This replaces the in-memory layer. It requires a REDIS_URL environment variable on Render.
 CHANNEL_LAYERS = {
     'default': {
-        'BACKEND': 'channels.layers.InMemoryChannelLayer',
+        'BACKEND': 'channels_redis.core.RedisChannelLayer',
+        'CONFIG': {
+            "hosts": [os.environ.get('REDIS_URL', 'redis://127.0.0.1:6379')],
+        },
     },
 }
 
@@ -56,6 +69,7 @@ CHANNEL_LAYERS = {
 MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware',
     'django.middleware.security.SecurityMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware',  # Added for serving static files in production
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -95,13 +109,15 @@ TEMPLATES = [
 WSGI_APPLICATION = 'Backend_Part.wsgi.application'
 
 # -------------------------------
-# DATABASE
+# DATABASE (PostgreSQL via Neon)
 # -------------------------------
+# Uses the DATABASE_URL environment variable provided by Neon on Render.
 DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
-    }
+    'default': dj_database_url.config(
+        default=os.environ.get('DATABASE_URL', f'sqlite:///{BASE_DIR / "db.sqlite3"}'),
+        conn_max_age=600,
+        conn_health_checks=True,
+    )
 }
 
 # -------------------------------
@@ -123,15 +139,16 @@ USE_I18N = True
 USE_TZ = True
 
 # -------------------------------
-# STATIC FILES
+# STATIC & MEDIA FILES
 # -------------------------------
-STATIC_URL = 'static/'
+STATIC_URL = '/static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
-STATICFILES_DIRS = [BASE_DIR / 'static']
+# Only include STATICFILES_DIRS if the 'static' folder exists to prevent errors
+if os.path.exists(BASE_DIR / 'static'):
+    STATICFILES_DIRS = [BASE_DIR / 'static']
+# Use WhiteNoise for serving static files in production
+STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 
-# -------------------------------
-# MEDIA FILES
-# -------------------------------
 MEDIA_URL = '/media/'
 MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 
@@ -154,9 +171,11 @@ AUTH_USER_MODEL = 'api.User'
 # -------------------------------
 # CORS SETTINGS
 # -------------------------------
-CORS_ALLOW_ALL_ORIGINS = True
+# In production, replace '*' with your actual frontend URL (e.g., 'https://your-app.netlify.app')
+CORS_ALLOW_ALL_ORIGINS = True  # Consider restricting this in production
 CORS_ALLOW_CREDENTIALS = True
 
+# You can keep these for local dev; the ALLOW_ALL_ORIGINS will override in production if True
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:3000",
     "http://127.0.0.1:3000",
@@ -217,14 +236,15 @@ SIMPLE_JWT = {
 # -------------------------------
 # EMAIL SETTINGS
 # -------------------------------
+# IMPORTANT: Move the password to an environment variable.
 EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
 EMAIL_HOST = 'smtp.gmail.com'
 EMAIL_PORT = 465
 EMAIL_USE_SSL = True
 EMAIL_USE_TLS = False
 
-EMAIL_HOST_USER = 'lulieeliyas@gmail.com'
-EMAIL_HOST_PASSWORD = 'edrw klwd tigh toeb'
+EMAIL_HOST_USER = os.environ.get('EMAIL_HOST_USER', 'lulieeliyas@gmail.com')
+EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD', '')  # SET THIS ON RENDER
 
 DEFAULT_FROM_EMAIL = EMAIL_HOST_USER
 SERVER_EMAIL = EMAIL_HOST_USER
