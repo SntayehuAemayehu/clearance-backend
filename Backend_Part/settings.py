@@ -172,7 +172,7 @@ AUTH_USER_MODEL = 'api.User'
 # CORS SETTINGS
 # -------------------------------
 # In production, replace '*' with your actual frontend URL (e.g., 'https://your-app.netlify.app')
-CORS_ALLOW_ALL_ORIGINS = True  # Consider restricting this in production
+CORS_ALLOW_ALL_ORIGINS = False  # Consider restricting this in production
 CORS_ALLOW_CREDENTIALS = True
 
 # You can keep these for local dev; the ALLOW_ALL_ORIGINS will override in production if True
